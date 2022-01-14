@@ -105,6 +105,7 @@ for (i in 1:7) {
   height = 10 # 縦 km.
   map_type = "WA" # 地図の種類.
   
+  # 1 ㎞ になる緯度幅・経度幅を, 赤道半径, 極半径, 円周率を使って各地点ごとに算出.
   # 1 km to longitude.  
   equator_r = 6378137
   long_degree = (360*1000)/(2*pi*(equator_r*cos(lat*pi/180)))
