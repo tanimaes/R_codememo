@@ -235,42 +235,9 @@ sr1+sr2
 # GAM検討 (2022-04-01). ----------------------------------------------------------
 # stl 関数の Loess 以外にも試したいので, GAM を構築しようと思います.
 # 有川の水温データ(ガラモ場底層のDOロガーのデータを使用).
-temp_ari = tibble(fpath = dir("~/Lab_Data/kawatea/Oxygen/",
-                              pattern = "arikawagaramo_0m_2[12][01]",
-                              full = T)) |> 
-  mutate(data = map(fpath, read_onset)) |> 
-  unnest() |> 
-  select(datetime, temperature) |> 
-  mutate(location = "arikawa",
-         station = as.factor("garamo")) |> 
-  rename(temp = temperature)
-
-period = read_csv("~/Lab_Data/kawatea/period_info_220329.csv") |> 
-  mutate(datetime = map2(start_date, end_date, \(x,y){
-    seq(x, y, by = "10 min")
-  })) |> unnest() |> 
-  filter(location == "arikawagaramo") |> 
-  select(datetime)
-
-temp_ari = temp_ari |> 
-  inner_join(period, by = c("datetime"))
-
-temp_a10 = temp_ari |> 
-  mutate(diff = as.numeric(datetime - lag(datetime))) |> 
-  mutate(diff = replace_na(diff, 10)) |> 
-  mutate(diff = ifelse(near(diff, 10), 0, 1)) |> 
-  mutate(group = cumsum(diff)) |> 
-  filter(near(group, 10))
 
 # 七目郷の水温データ.
 temp_na = read_rds("~/Lab_Data/Naname/rds_write_out/temp_writeout_naname_2021.rds")
-
-# 気象庁のデータ.
-jma = read_rds("~/Lab_Data/Naname/rds_write_out/JMA_writeout_arikawa.rds") |> 
-  filter(between(datetime, 
-                 ymd_hms("2021-01-28 00:00:00"), 
-                 ymd_hms("2022-03-25 00:00:00")))
-
 
 temp_na = temp_na |> 
   filter(near(as.numeric(station), 1, tol = 0.1)) |> 
