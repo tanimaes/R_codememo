@@ -126,6 +126,8 @@ time_series_N1 = test_N1 |> pull(temp)
 time_series_N1 = ts(as.numeric(time_series_N1), frequency = 144) # 必ずnumeric型.
 # frequencyで周期の情報をインプット.
 
+# stl() では, Loess による平滑化が行われます。
+# locally weighted scatterplot smoother (局所重み付き散布図平滑化）.
 stl_N1 = stl(time_series_N1, s.window="periodic")
 
 # STL分解結果のデータ
@@ -228,3 +230,137 @@ sr2 = out_Ag |>
 
 
 sr1+sr2
+
+
+# GAM検討 (2022-04-01). ----------------------------------------------------------
+# stl 関数の Loess 以外にも試したいので, GAM を構築しようと思います.
+# 有川の水温データ(ガラモ場底層のDOロガーのデータを使用).
+temp_ari = tibble(fpath = dir("~/Lab_Data/kawatea/Oxygen/",
+                              pattern = "arikawagaramo_0m_2[12][01]",
+                              full = T)) |> 
+  mutate(data = map(fpath, read_onset)) |> 
+  unnest() |> 
+  select(datetime, temperature) |> 
+  mutate(location = "arikawa",
+         station = as.factor("garamo")) |> 
+  rename(temp = temperature)
+
+period = read_csv("~/Lab_Data/kawatea/period_info_220329.csv") |> 
+  mutate(datetime = map2(start_date, end_date, \(x,y){
+    seq(x, y, by = "10 min")
+  })) |> unnest() |> 
+  filter(location == "arikawagaramo") |> 
+  select(datetime)
+
+temp_ari = temp_ari |> 
+  inner_join(period, by = c("datetime"))
+
+temp_a10 = temp_ari |> 
+  mutate(diff = as.numeric(datetime - lag(datetime))) |> 
+  mutate(diff = replace_na(diff, 10)) |> 
+  mutate(diff = ifelse(near(diff, 10), 0, 1)) |> 
+  mutate(group = cumsum(diff)) |> 
+  filter(near(group, 10))
+
+# 七目郷の水温データ.
+temp_na = read_rds("~/Lab_Data/Naname/rds_write_out/temp_writeout_naname_2021.rds")
+
+# 気象庁のデータ.
+jma = read_rds("~/Lab_Data/Naname/rds_write_out/JMA_writeout_arikawa.rds") |> 
+  filter(between(datetime, 
+                 ymd_hms("2021-01-28 00:00:00"), 
+                 ymd_hms("2022-03-25 00:00:00")))
+
+
+temp_na = temp_na |> 
+  filter(near(as.numeric(station), 1, tol = 0.1)) |> 
+  mutate(time = hour(datetime) + minute(datetime)/60,
+         date = as.factor(as.Date(datetime)),
+         tau = as.numeric(datetime)) |> 
+  mutate(tau = (tau - min(tau))/3600)
+
+###################################################################### modeling.
+library(mgcv)
+
+gam1 = gam(temp ~ s(tau, bs = "ps", k = 200) + s(time, bs = "cp", k = 4), data = temp_na)
+# gam2 = gam(temp ~ s(tau, bs = "ps", k = 400) + s(time, bs = "cp", k = 24), data = temp_na)
+# gam3 = gam(temp ~ s(tau, bs = "ps", k = 800) + s(time, bs = "cp", k = 24), data = temp_na)
+
+# AIC(gam1, gam2, gam3)
+# 
+# temp_na |>
+#   mutate(res1 = residuals(gam1),
+#          res2 = residuals(gam3)) |>
+#   ggplot() +
+#   geom_line(aes(x = datetime, y = res1, color = "res1")) +
+#   geom_line(aes(x = datetime, y = res2, color = "res2"))
+#   
+# model summary
+# summary(gam3)
+
+hat = predict(gam1)
+se = predict(gam1, se.fit = T)$se.fit
+df2 = temp_na |> mutate(hat, se) |> 
+  mutate(l95 = hat - 1.96 * se,
+         u95 = hat + 1.96 * se)
+
+# GAM 確認.
+df2 |> 
+  ggplot() + 
+  geom_point(aes(x = datetime, y = temp),
+             color = "dodgerblue4", alpha = 0.5, size = 1) +
+  geom_line(aes(x = datetime, y = hat),
+            color = "black") +
+   ggpubr::theme_pubr()
+
+############################################################# 手動で各成分に分解.
+# trend 計算用データ.
+for_trend = temp_na |>
+  expand(tau = tau,
+         time = mean(time))
+
+# season 計算用データ.
+for_season = temp_na |>
+  expand(time = time,
+         tau = 0)
+
+# 各成分を算出.
+trend_season_resid = for_trend |>
+  bind_cols(predict(gam1,
+                    newdata = for_trend,
+                    # type = "response",
+                    interval = 'confidence',
+                    lvel = 0.95,
+                    se.fit = T) |>
+              as_tibble()) |> 
+  mutate(datetime = temp_na$datetime,
+         temp = temp_na$temp,
+         time = temp_na$time) |> # もとの time に置き換え.
+  rename(trend = fit,
+         se.trend = se.fit) |> 
+  mutate(diff = temp - trend) |>
+  nest_by(time) |> 
+  bind_cols(predict(gam1,
+                    newdata = for_season,
+                    # type = "response",
+                    interval = 'confidence',
+                    lvel = 0.95,
+                    se.fit = T) |>
+              as_tibble()) |> 
+  unnest() |> 
+  ungroup() |> 
+  arrange(datetime) |> 
+  mutate(season = fit - min(fit)) |> 
+  mutate(resid = diff - season) |> 
+  mutate(value_check = trend + season + resid) |> 
+  select(datetime, tau, time, temp, trend, season, resid, value_check)
+
+# 作図.
+trend_season_resid |> 
+  pivot_longer(temp:value_check, names_to = "key", values_to = "value") |> 
+  mutate(key = factor(key, 
+                      levels = c("temp", "value_check", "trend", "season", "resid"),
+                      labels = c("Temperature", "value_check", "Trend", "Season", "Residuals"))) |> 
+  ggplot() +
+  geom_line(aes(datetime, value)) +
+  facet_grid(key~., scales = "free")
