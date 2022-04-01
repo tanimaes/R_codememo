@@ -10,7 +10,7 @@ Sys.setlocale("LC_TIME", "en_US.UTF-8") # システムロケールはアメリ�
 
 font_add_google("Noto Sans JP","notosans")
 # １）theme_set() をつかってデフォルトのフォントをかえる
-# ２）ggplot() の theme() からとんとの指定をはずす。
+# ２）ggplot() の theme() からフォントの指定をはずす。
 theme_pubr(base_family = "notosans") |> theme_set()
 showtext_auto()
 
