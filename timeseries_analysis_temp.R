@@ -232,10 +232,8 @@ sr2 = out_Ag |>
 sr1+sr2
 
 
-# GAM検討 (2022-04-01). ----------------------------------------------------------
-# stl 関数の Loess 以外にも試したいので, GAM を構築しようと思います.
-# 有川の水温データ(ガラモ場底層のDOロガーのデータを使用).
-
+# GAM (2022-04-01). ------------------------------------------------------------
+# stl() の loess 以外にも試したいので, GAM を構築.
 # 七目郷の水温データ.
 temp_na = read_rds("~/Lab_Data/Naname/rds_write_out/temp_writeout_naname_2021.rds")
 
@@ -250,8 +248,8 @@ temp_na = temp_na |>
 library(mgcv)
 
 gam1 = gam(temp ~ s(tau, bs = "ps", k = 200) + s(time, bs = "cp", k = 4), data = temp_na)
-# gam2 = gam(temp ~ s(tau, bs = "ps", k = 400) + s(time, bs = "cp", k = 24), data = temp_na)
-# gam3 = gam(temp ~ s(tau, bs = "ps", k = 800) + s(time, bs = "cp", k = 24), data = temp_na)
+# gam2 = gam(temp ~ s(tau, bs = "ps", k = 400) + s(time, bs = "cp", k = 4), data = temp_na)
+# gam3 = gam(temp ~ s(tau, bs = "ps", k = 800) + s(time, bs = "cp", k = 4), data = temp_na)
 
 # AIC(gam1, gam2, gam3)
 # 
@@ -271,20 +269,21 @@ df2 = temp_na |> mutate(hat, se) |>
   mutate(l95 = hat - 1.96 * se,
          u95 = hat + 1.96 * se)
 
-# GAM 確認.
+# GAM確認.
 df2 |> 
   ggplot() + 
   geom_point(aes(x = datetime, y = temp),
              color = "dodgerblue4", alpha = 0.5, size = 1) +
   geom_line(aes(x = datetime, y = hat),
             color = "black") +
-   ggpubr::theme_pubr()
+  ggpubr::theme_pubr()
 
-############################################################# 手動で各成分に分解.
+
+############################################################## 手動で成分に分解.
 # trend 計算用データ.
 for_trend = temp_na |>
   expand(tau = tau,
-         time = mean(time))
+         time = 9.9526377041) # これは何？
 
 # season 計算用データ.
 for_season = temp_na |>
@@ -317,10 +316,17 @@ trend_season_resid = for_trend |>
   unnest() |> 
   ungroup() |> 
   arrange(datetime) |> 
-  mutate(season = fit - min(fit)) |> 
+  mutate(season = fit - mean(fit)) |> 
   mutate(resid = diff - season) |> 
   mutate(value_check = trend + season + resid) |> 
   select(datetime, tau, time, temp, trend, season, resid, value_check)
+
+trend_season_resid |> 
+  mutate(diff = temp - trend) |> 
+  ggplot() +
+  geom_point(aes(datetime, diff)) +
+  geom_smooth(aes(datetime, diff), formula = y ~ x) 
+
 
 # 作図.
 trend_season_resid |> 
@@ -329,5 +335,9 @@ trend_season_resid |>
                       levels = c("temp", "value_check", "trend", "season", "resid"),
                       labels = c("Temperature", "value_check", "Trend", "Season", "Residuals"))) |> 
   ggplot() +
-  geom_line(aes(datetime, value)) +
-  facet_grid(key~., scales = "free")
+  geom_line(aes(datetime, value, group = key, color = key)) +
+  facet_grid(key~., scales = "free") +
+  scale_color_viridis_d(end = 0.7)
+
+trend_season_resid |> 
+  mutate(c = sum(resid))
