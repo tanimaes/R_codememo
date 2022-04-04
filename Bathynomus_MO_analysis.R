@@ -55,11 +55,11 @@ df2 = df1 |> mutate(hat, se) |>
   mutate(across(c(hat, l95, u95), exp))
 
 df2 |> 
-ggplot() + 
-  geom_point(aes(x = date, y = MO2val), size = 3) +
-  geom_line(aes(x = date, y = hat), color = "turquoise4", size = 2) +
-  geom_ribbon(aes(x = date, ymin = l95, ymax = u95), fill = "turquoise4", alpha = 0.3) +
+  ggplot() + 
+  geom_point(aes(x = elapsed_day, y = MO2val), size = 3) +
+  geom_line(aes(x = elapsed_day, y = hat), color = "turquoise4", size = 2) +
+  geom_ribbon(aes(x = elapsed_day, ymin = l95, ymax = u95), fill = "turquoise4", alpha = 0.3) +
   ggtitle("オオグソクムシの絶食に対する代謝速度変化") +
-  scale_x_continuous("絶食日数") +
+  scale_x_continuous("絶食日数", ) +
   scale_y_continuous(expression("MO"[2]~"(mg"~"H"^{-1}~"Kg"^{-1}~")")) +
   ggpubr::theme_pubr()
