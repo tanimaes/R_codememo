@@ -42,12 +42,13 @@ pdata1 = dset |>
               as_tibble())
 
 g1 = ggplot() + 
-  geom_point(aes(x = month, y = scaled_n), 
-             data = dako2, size = 3) +
-  geom_line(aes(x = month, y = exp(fit)),
-            data = pdata1, color = "black", linetype = "dashed", size = 1) +
   geom_ribbon(aes(x = month, ymin = exp(fit - se.fit), ymax = exp(fit + se.fit)),
               data = pdata1, fill = "turquoise4", alpha = 0.5)+
+  geom_line(aes(x = month, y = exp(fit)),
+            data = pdata1, color = "black",linetype = "dashed", size = 1) +
+  geom_point(aes(x = month, y = scaled_n), 
+             data = dako2, size = 3) +
+  ylim(0,1) +
   ggpubr::theme_pubr()
 
 # ベイズモデリング. ------------------------------------------------------------
@@ -109,21 +110,14 @@ g2 = ggplot() +
   #             fill =  "turquoise4",
   #             alpha = 0.2,
   #             data = qdata2) +
-  geom_ribbon(aes(x = month,
-                  ymin = .lower,
-                  ymax = .upper),
-              fill =  "turquoise4",
-              alpha = 0.5,
-              data = pdata2) +
-  geom_line(aes(x = month, 
-                y = .epred),
-            data = pdata2,
-            linetype = "dashed",
-            size = 1) +
+  geom_ribbon(aes(x = month, ymin = .lower, ymax = .upper),
+              fill =  "turquoise4", alpha = 0.5, data = pdata2) +
+  geom_line(aes(x = month, y = .epred),
+            data = pdata2, linetype = "dashed", size = 1) +
   geom_point(aes(x = month, y = scaled_n),
              data = dako2, size = 3) +
+  ylim(0, 1) +
   theme_pubr() 
 
 library(patchwork)
-
 g1+g2
