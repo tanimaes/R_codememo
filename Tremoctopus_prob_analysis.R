@@ -45,9 +45,9 @@ g1 = ggplot() +
   geom_point(aes(x = month, y = scaled_n), 
              data = dako2, size = 3) +
   geom_line(aes(x = month, y = exp(fit)),
-            data = pdata1, color = "turquoise4", size = 2) +
+            data = pdata1, color = "black", linetype = "dashed", size = 1) +
   geom_ribbon(aes(x = month, ymin = exp(fit - se.fit), ymax = exp(fit + se.fit)),
-              data = pdata1, fill = "turquoise4", alpha = 0.3)+
+              data = pdata1, fill = "turquoise4", alpha = 0.5)+
   ggpubr::theme_pubr()
 
 # ベイズモデリング. ------------------------------------------------------------
