@@ -1,4 +1,6 @@
-# 頻度論的なモデリングの練習.
+# Analysis of MO2 (oxygen metabolic volume) of Bathynomus doederleinii.
+# Data are provided by Shogo Tanaka.
+# 2021-03-13, Shinichiro Tanimae.
 library(tidyverse)
 library(lubridate)
 library(readxl)
@@ -35,6 +37,8 @@ df1 |>
   geom_smooth(aes(elapsed_day, MO2val), formula = y~log(x), method = "lm")
 
 # ここからモデリング. ----------------------------------------------------------
+# 頻度論的なモデリングの練習.
+
 # glm, gam 検討.
 m0 = glm(MO2val ~ 1, data = df1, family = Gamma(link = "log")) # 帰無モデル
 m1 = glm(MO2val ~ elapsed_day, data = df1, family = Gamma(link = "log")) # 一般化線形.
