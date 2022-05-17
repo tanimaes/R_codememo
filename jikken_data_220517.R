@@ -83,7 +83,7 @@ han1_day2_sheet1 = read_xlsx(file, sheet = 1) |> sheet1_func() |>
 han1_day2_sheet2 = read_xlsx(file, sheet = 2) |> sheet2_func()
 han1_day2_sheet3 = read_xlsx(file, sheet = 3) |> sheet3_func()
 
-# 2(A)班. -------------------------------------------------------------------------
+# 2班. -------------------------------------------------------------------------
 # 1日目.
 file = files |>  str_subset("A班5月12")
 
@@ -133,17 +133,14 @@ han4_day2_sheet1 = read_xlsx(file, sheet = 1) |> sheet1_func()
 han4_day2_sheet2 = read_xlsx(file, sheet = 2) |> sheet2_func()
 han4_day2_sheet3 = read_xlsx(file, sheet = 3) |> sheet3_func()
 
-# 班名が無かった班(ここでは X 班とします). -------------------------------------
+# 5班. -------------------------------------------------------------------------
 file = files |>  str_subset("実験結果.xlsx")
 
-hanX_sheet1 = read_xlsx(file, range = "B3:H163") |> sheet1_func() |> 
-  mutate(han = "X")
+hanX_sheet1 = read_xlsx(file, range = "B3:H163") |> sheet1_func() 
 hanX_sheet2 = read_xlsx(file, range = "J7:L57") |>
-  mutate(han = "X") |> 
-  sheet2_func()
+  mutate(han  = 5) |> sheet2_func()
 hanX_sheet3 = read_xlsx(file, range = "J3:N5") |> 
-  mutate(han = "X") |> 
-  sheet3_func()
+  mutate(han = 5) |> sheet3_func()
 
 # 6班. -------------------------------------------------------------------------
 # 1日目.
@@ -213,5 +210,25 @@ alldata |>
   ggplot() +
   geom_line(aes(x = time, y = mgl, color = light_c, group = light_c)) +
   facet_wrap(vars(han, species), scales = "free")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
