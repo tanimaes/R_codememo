@@ -8,7 +8,6 @@ files = dir("~/Lab_Data/学生実験/2022データ/", full = T)
 
 # データの書き込み方が班によって様々なので、１つ１つ整形していく. --------------
 
-# 列名書き換える関数を用意.
 sheet1_func = function(df){
   df |> 
     rename("han" = matches("班"),
