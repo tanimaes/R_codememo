@@ -1,3 +1,7 @@
+# 学生実験用のコード.
+# Shinichiro Tanimae
+# 2022-05-18
+
 library(tidyverse)
 library(lubridate)
 library(readxl)
@@ -6,7 +10,7 @@ library(stringi)
 # ファイルパスを取り出す. ------------------------------------------------------
 files = tibble(fpath = dir("~/Lab_Data/学生実験/2022データ/", full = T))
 
-# エクセルファイルのシートごとに読み込む関数を作る.
+# エクセルファイルのシートごとに読み込む関数を作る. ------------------------------
 
 sheet1_func = function(file){
   
