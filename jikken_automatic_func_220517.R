@@ -4,13 +4,20 @@ library(readxl)
 library(stringi)
 
 # ファイルパスを取り出す. ------------------------------------------------------
-files = dir("~/Lab_Data/学生実験/2022データ/", full = T)
+files = tibble(fpath = dir("~/Lab_Data/学生実験/2022データ/", full = T))
 
+# エクセルファイルのシートごとに読み込む関数を作る.
 
-# データの書き込み方が班によって様々なので、１つ１つ整形していく. --------------
-
-sheet1_func = function(file, sheet = 1){
-  read_xlsx(file, sheet) |> 
+sheet1_func = function(file){
+  
+  # 1つの班だけエクセルファイルのまとめ方が異なるので, 個別に読む.
+  if(str_detect(file, pattern = "実験結果.xlsx")){
+    df = read_xlsx(file, range = "B3:H163") 
+  }else{
+    df = read_xlsx(file, sheet = 1)  
+  }
+  
+  df = df |> 
     rename("han" = matches("班"),
            "sample" = matches("サンプル|番号"),
            "time" = matches("時間"),
@@ -26,10 +33,24 @@ sheet1_func = function(file, sheet = 1){
                                str_detect(light_c, pattern = "0") ~ "0ネット")) |> 
     mutate(across(c(han, sample, light_c), as.factor)) |> 
     drop_na(han)
+  
+  # 6 班の 2 日目の班名が D 班になっているので変える.
+  if(str_detect(file, pattern = "13_6班")){
+    df = df |> mutate(han = factor(6)) 
+  }
+  return(df)
 }
 
-sheet2_func = function(file, sheet = 2){
-  df = read_xlsx(file, sheet) |> 
+sheet2_func = function(file){
+  
+  # 1つの班だけエクセルファイルのまとめ方が異なるので, 個別に読む.
+  if(str_detect(file, pattern = "実験結果.xlsx")){
+    df = read_xlsx(file, range = "J7:L57")  |> mutate(han = 5)
+  }else{
+    df = read_xlsx(file, sheet = 2)
+  }
+  
+  df =  df |>
     rename("han" = matches("班"),
            "sample" = matches("サンプル|番号"),
            "light_c" = matches("光環境"),
@@ -41,35 +62,49 @@ sheet2_func = function(file, sheet = 2){
                                str_detect(light_c, pattern = "4") ~ "4ネット",
                                str_detect(light_c, pattern = "2") ~ "2ネット",
                                str_detect(light_c, pattern = "0") ~ "0ネット")) |> 
-    mutate(across(c(han, sample, light_c), as.factor))
+    mutate(across(c(han, sample), as.factor)) 
   
-  A = df |> drop_na(light_c)
-  N = unique(A$light_c) |> length()
+  # A 班の記入ミスを書き換え.
+  if(str_detect(file, pattern = "A班5月13")){
+    df = df |> mutate(light_c = ifelse(row_number() > 18, "2ネット", light_c))
+  }
   
+  N = df |> drop_na(light_c) |> pull(light_c) |> unique() |> length()
+
+  # アルミホイル使用時の光量子量を書いていない班のデータを書き換え.
   if(N != 5){
     df = df |> 
-      add_row(light_c = factor("アルミホイル"),
+      add_row(light_c = c("アルミホイル"),
               light = 0) |> 
       fill(c(han, sample))
   }
   
-  HAN = df$han |> unique()
-  
-  if(HAN == "C"){
-    df = df |> 
-      mutate(sample = ifelse(str_detect(file, 
-                                        pattern = "C班5月12日"), factor(1), factor(2))) 
+  # C 班の sample を書き換え.
+  if(str_detect(file, pattern = "C班")){
+    if(str_detect(file, pattern = "5月12")){
+      df = df |> mutate(sample = factor(1))
+    }else{
+      df = df |> mutate(sample = factor(2))
+    }
   }
   
   df |> 
     fill(c("han", "light_c", "sample"), .direction = "down") |> 
+    mutate(light_c = as.factor(light_c)) |> 
     group_by(han, light_c, sample) |> 
-    summarise(light = mean(light), .groups = "drop") |> 
-    mutate(sample = as.factor(sample))
+    summarise(light = mean(light), .groups = "drop")
 }
 
-sheet3_func = function(file, sheet = 3){
-  df = read_xlsx(file, sheet) |>  
+sheet3_func = function(file){
+  
+  # 1つの班だけエクセルファイルのまとめ方が異なるので, 個別に読む.
+  if(str_detect(file, pattern = "実験結果.xlsx")){
+    df = read_xlsx(file, range = "J3:N5") |> mutate(han = 5)
+  }else{
+    df = read_xlsx(file, sheet = 3)  
+  }
+  
+  df = df |> 
     rename("han" = matches("班"),
            "datetime" = matches("実験日"),
            "species" = matches("海藻"),
@@ -81,16 +116,15 @@ sheet3_func = function(file, sheet = 3){
            vol = str_remove_all(vol, pattern = "[a-z]")) |> 
     mutate(across(c(weight, vol), as.double))
   
-  HAN = df$han |> unique()
-  
-  if(HAN == "C"){
-    if(str_detect(file, pattern = "C班5月12日")){
-      df = df |> slice(1)
+  # C 班の データフレームを分割.
+  if(str_detect(file, pattern = "C班")){
+    if(str_detect(file, pattern = "5月12")){
+      df = df |> filter(datetime == ymd_hms("2022-05-12 00:00:00"))
     }else{
-      df = df |> slice(2)
+      df = df |> filter(datetime == ymd_hms("2022-05-13 00:00:00"))
     }
   }
-  df 
+  return(df)
 }
 
 func_all = function(file){
@@ -99,20 +133,19 @@ func_all = function(file){
   s2 = sheet2_func(file)
   s3 = sheet3_func(file)
   
-  alldata = s1 |> 
+  s1 |> 
     left_join(s2, by = c("han", "sample", "light_c")) |> 
-    left_join(s3, by = c("han", "sample"))
-  
-  alldata = alldata |> 
+    left_join(s3, by = c("han", "sample")) |> 
     mutate(mgl = ifelse(han == 2 & mgl < 2, mgl*10, mgl),
            mgl = ifelse(han == 2 & mgl > 50, mgl/10, mgl))
-  
-  alldata
 }
 
-dall = tibble(file = files) |> 
-  slice_head(n = 10) |> 
-  mutate(data = map(file, func_all))
+# データの読み込み. ------------------------------------------------------------
+alldata = files |> mutate(data = map(fpath, func_all)) |> unnest()
 
-dall |> unnest() |> print(n = Inf)
+# 作図.
+alldata |> 
+  ggplot() +
+  geom_line(aes(x = time, y = mgl, color = light_c, group = light_c)) +
+  facet_wrap(vars(han, species), scales = "free")
 
