@@ -6,9 +6,17 @@ library(stringi)
 # ファイルパスを取り出す. ------------------------------------------------------
 files = dir("~/Lab_Data/学生実験/2022データ/", full = T)
 
+
 # データの書き込み方が班によって様々なので、１つ１つ整形していく. --------------
 
-sheet1_func = function(df){
+sheet1_func = function(file){
+  
+  if(str_detect(file, pattern = "実験結果.xlsx")){
+    df = read_xlsx(file, range = "B3:H163") 
+  }else{
+    df = read_xlsx(file, sheet = 1)  
+  }
+  
   df |> 
     rename("han" = matches("班"),
            "sample" = matches("サンプル|番号"),
@@ -23,10 +31,18 @@ sheet1_func = function(df){
                                str_detect(light_c, pattern = "4") ~ "4ネット",
                                str_detect(light_c, pattern = "2") ~ "2ネット",
                                str_detect(light_c, pattern = "0") ~ "0ネット")) |> 
-    mutate(across(c(han, sample, light_c), as.factor))
+    mutate(across(c(han, sample, light_c), as.factor)) |> 
+    drop_na(han)
 }
 
 sheet2_func = function(df){
+  
+  if(str_detect(file, pattern = "実験結果.xlsx")){
+    df = read_xlsx(file, range = "J7:L57")  |> mutate(han = 5)
+  }else{
+    df = read_xlsx(file, sheet = 2)  
+  }
+  
   df =  df |> 
     rename("han" = matches("班"),
            "sample" = matches("サンプル|番号"),
@@ -54,6 +70,13 @@ sheet2_func = function(df){
 }
 
 sheet3_func = function(df){
+  
+  if(str_detect(file, pattern = "実験結果.xlsx")){
+    df = read_xlsx(file, range = "J3:N5") |> mutate(han = 5)
+  }else{
+    df = read_xlsx(file, sheet = 3)  
+  }
+  
   df |> 
     rename("han" = matches("班"),
            "datetime" = matches("実験日"),
@@ -71,96 +94,83 @@ sheet3_func = function(df){
 # 1日目.
 file = files |>  str_subset("1班 1")
 
-han1_day1_sheet1 = read_xlsx(file, sheet = 1) |> sheet1_func()
-han1_day1_sheet2 = read_xlsx(file, sheet = 2) |> sheet2_func()
-han1_day1_sheet3 = read_xlsx(file, sheet = 3) |> sheet3_func()
+han1_day1_sheet1 = sheet1_func(file)
+han1_day1_sheet2 = sheet2_func(file)
+han1_day1_sheet3 = sheet3_func(file)
 
 # 2日目.
 file = files |>  str_subset("1班2")
 
-han1_day2_sheet1 = read_xlsx(file, sheet = 1) |> sheet1_func() |> 
-  drop_na(han)
-han1_day2_sheet2 = read_xlsx(file, sheet = 2) |> sheet2_func()
-han1_day2_sheet3 = read_xlsx(file, sheet = 3) |> sheet3_func()
+han1_day2_sheet1 = sheet1_func(file) 
+han1_day2_sheet2 = sheet2_func(file)
+han1_day2_sheet3 = sheet3_func(file)
 
 # 2班. -------------------------------------------------------------------------
 # 1日目.
 file = files |>  str_subset("A班5月12")
 
-han2_day1_sheet1 = read_xlsx(file, sheet = 1) |> sheet1_func()
-han2_day1_sheet2 = read_xlsx(file, sheet = 2) |> sheet2_func()
-han2_day1_sheet3 = read_xlsx(file, sheet = 3) |> sheet3_func()
+han2_day1_sheet1 = sheet1_func(file)
+han2_day1_sheet2 = sheet2_func(file)
+han2_day1_sheet3 = sheet3_func(file)
 
 # 2日目.
 file = files |>  str_subset("A班5月13")
 
-han2_day2_sheet1 = read_xlsx(file, sheet = 1) |> sheet1_func()
-han2_day2_sheet2 = read_xlsx(file, sheet = 2) |> sheet2_func() |> 
-  mutate(light_c = ifelse(row_number() > 18, "2ネット", light_c))
-han2_day2_sheet3 = read_xlsx(file, sheet = 3) |> sheet3_func()
+han2_day2_sheet1 = sheet1_func(file)
+han2_day2_sheet2 = sheet2_func(file) |> mutate(light_c = ifelse(row_number() > 18, "2ネット", light_c))
+han2_day2_sheet3 = sheet3_func(file)
 
 # C班. -------------------------------------------------------------------------
 # 1日目.
 file = files |>  str_subset("C班5月12")
 
-hanC_day1_sheet1 = read_xlsx(file, sheet = 1) |> sheet1_func()
-hanC_day1_sheet2 = read_xlsx(file, sheet = 2) |> sheet2_func() |> 
-  mutate(sample = factor(1))
-hanC_day1_sheet3 = read_xlsx(file, sheet = 3) |> sheet3_func() |> 
-  filter(datetime == ymd_hms("2022-05-12 00:00:00"))
+hanC_day1_sheet1 = sheet1_func(file)
+hanC_day1_sheet2 = sheet2_func(file) |> mutate(sample = factor(1))
+hanC_day1_sheet3 = sheet3_func(file) |> filter(datetime == ymd_hms("2022-05-12 00:00:00"))
 
 # 2日目.
 file = files |>  str_subset("C班5月13")
 
-hanC_day2_sheet1 = read_xlsx(file, sheet = 1) |> sheet1_func()
-hanC_day2_sheet2 = read_xlsx(file, sheet = 2) |> sheet2_func() |> 
-  mutate(sample = factor(2))
-hanC_day2_sheet3 = read_xlsx(file, sheet = 3) |> sheet3_func() |> 
-  filter(datetime == ymd_hms("2022-05-13 00:00:00"))
+hanC_day2_sheet1 = sheet1_func(file)
+hanC_day2_sheet2 = sheet2_func(file) |> mutate(sample = factor(2))
+hanC_day2_sheet3 = sheet3_func(file) |> filter(datetime == ymd_hms("2022-05-13 00:00:00"))
 
 # 4班. -------------------------------------------------------------------------
 # 1日目.
 file = files |>  str_subset("4班サンプル番号1")
 
-han4_day1_sheet1 = read_xlsx(file, sheet = 1) |> sheet1_func() 
-han4_day1_sheet2 = read_xlsx(file, sheet = 2) |> sheet2_func()
-han4_day1_sheet3 = read_xlsx(file, sheet = 3) |> sheet3_func()
+han4_day1_sheet1 = sheet1_func(file) 
+han4_day1_sheet2 = sheet2_func(file)
+han4_day1_sheet3 = sheet3_func(file)
 
 # 2日目.
 file = files |>  str_subset("4班サンプル番号２")
 
-han4_day2_sheet1 = read_xlsx(file, sheet = 1) |> sheet1_func()
-han4_day2_sheet2 = read_xlsx(file, sheet = 2) |> sheet2_func()
-han4_day2_sheet3 = read_xlsx(file, sheet = 3) |> sheet3_func()
+han4_day2_sheet1 = sheet1_func(file)
+han4_day2_sheet2 = sheet2_func(file)
+han4_day2_sheet3 = sheet3_func(file)
 
 # 5班. -------------------------------------------------------------------------
 file = files |>  str_subset("実験結果.xlsx")
 
-hanX_sheet1 = read_xlsx(file, range = "B3:H163") |> sheet1_func() 
-hanX_sheet2 = read_xlsx(file, range = "J7:L57") |>
-  mutate(han  = 5) |> sheet2_func()
-hanX_sheet3 = read_xlsx(file, range = "J3:N5") |> 
-  mutate(han = 5) |> sheet3_func()
+hanX_sheet1 = sheet1_func(file) 
+hanX_sheet2 = sheet2_func(file)
+hanX_sheet3 = sheet3_func(file)
 
 # 6班. -------------------------------------------------------------------------
 # 1日目.
 file = files |>  str_subset("12_6班")
 
-han6_day1_sheet1 = read_xlsx(file, sheet = 1) |> sheet1_func() |> 
-  drop_na(han)
-han6_day1_sheet2 = read_xlsx(file, sheet = 2) |> sheet2_func() |> 
-  fill(c("han", "light_c"), .direction = "down")
-han6_day1_sheet3 = read_xlsx(file, sheet = 3) |> sheet3_func()
+han6_day1_sheet1 = sheet1_func(file)
+han6_day1_sheet2 = sheet2_func(file) |> fill(c("han", "light_c"), .direction = "down")
+han6_day1_sheet3 = sheet3_func(file)
 
 # 2日目.
 file = files |>  str_subset("13_6班")
 
-han6_day2_sheet1 = read_xlsx(file, sheet = 1) |> sheet1_func() |>
-  drop_na(han) |> 
-  mutate(han = factor(6))
-han6_day2_sheet2 = read_xlsx(file, sheet = 2) |> sheet2_func() |> 
-  fill(c("han", "light_c", "sample"), .direction = "down")
-han6_day2_sheet3 = read_xlsx(file, sheet = 3) |> sheet3_func()
+han6_day2_sheet1 = sheet1_func(file) |> mutate(han = factor(6))
+han6_day2_sheet2 = sheet2_func(file) |> fill(c("han", "light_c", "sample"), .direction = "down")
+han6_day2_sheet3 = sheet3_func(file)
 
 # データをまとめる. ------------------------------------------------------------
 
@@ -210,13 +220,6 @@ alldata |>
   ggplot() +
   geom_line(aes(x = time, y = mgl, color = light_c, group = light_c)) +
   facet_wrap(vars(han, species), scales = "free")
-
-
-
-
-
-
-
 
 
 
