@@ -192,7 +192,7 @@ dset |>
   geom_line(aes(y = valuehat, color = species),size = 1) +
   facet_wrap(han ~ light, ncol = 5)
 
-# 授業用. ----------------------------------------------------------------------
+# 授業用データ. ----------------------------------------------------------------
 mgldata = files |>
   mutate(data = map(fpath, sheet1_func)) |> 
   unnest() |> 
@@ -212,36 +212,13 @@ df0 = mgldata |>
   left_join(seaweeddata, by = c("han", "sample")) |> 
   left_join(lightdata, by = c("han", "light", "sample"))
 
-# 関数を定義. ------------------------------------------------------------------
-# 関数の定義 
+# 線形モデルへの当てはめ. ------------------------------------------------------
 
 # [DO] と [時間]の関係性を線形で表現.
 fit_lm = function(df){
   lm(mgl ~ time, data = df)
 } 
 
-# 期待値の算出.
-get_fit = function(data, mout){
-  data |> mutate(fit = predict(mout))
-}
-
-# 傾きの抽出.
-get_slope = function (model){
-  coef(model)[2]
-}
-
-# 光合成-光曲線の式.
-pecurve = function(pmax, alpha, rd, ppfd){
-  pmax*(1 - exp(-alpha / pmax*ppfd)) - rd
-}
-
-# 光合成光曲線の当てはめ.
-fit_nls = function(data){
-  nlsLM(rate ~ pecurve(pmax = pmax, alpha = alpha, rd = rd, ppfd = ppfd_mean),
-        data = data, start = START)
-}
-
-# modeling. --------------------------------------------------------------------
 df1 = df0 |> group_nest(han, species, light)
 df1 = df1 |> mutate(mout = map(data, fit_lm))
 
@@ -257,21 +234,46 @@ df_tosave2 = df1 |>
   unnest(cfs) |> 
   select(han, species, light, term, estimate, std.error, statistic, p.value)
 
+# 期待値の算出.
+get_fit = function(data, mout){
+  data |> mutate(fit = predict(mout))
+}
+
 df2 = df1 |> mutate(fit = map2(data, mout, get_fit))
 
+# 作図.
 df2 |> 
   select(han, species, light, fit) |> 
   unnest(fit) |> 
   ggplot() +
-  geom_point(aes(time, mgl, color = species)) +
+  geom_point(aes(time, mgl, color = species), size = 3) +
   geom_line(aes(time, fit, group = species), color = "black", size = 1) +
-  facet_wrap(vars(han, light))
+  facet_grid(light~han)
+
+# 傾き(変化速度)の抽出.
+get_slope = function (model){
+  coef(model)[2]
+}
 
 df3 = df2 |> 
   mutate(slope = map_dbl(mout, get_slope)) |>
   unnest(data) |> 
-  mutate(rate = slope*vol/gww)
+  mutate(rate = slope*vol/gww) 
 
+# 非線形モデルへの当てはめ. ----------------------------------------------------
+
+# 光合成-光曲線の式.
+pecurve = function(pmax, alpha, rd, ppfd){
+  pmax*(1 - exp(-alpha / pmax*ppfd)) - rd
+}
+
+# 光合成光曲線の当てはめ.
+fit_nls = function(data){
+  nlsLM(rate ~ pecurve(pmax = pmax, alpha = alpha, rd = rd, ppfd = ppfd_mean),
+        data = data, start = START)
+}
+
+# 初期値.
 START = list(pmax = 5, alpha = 0.1, rd = 0.1)
 
 df3 = df3 |> 
@@ -280,13 +282,16 @@ df3 = df3 |>
   mutate(peout = map(data, fit_nls)) |> 
   mutate(pefit = map2(data, peout, get_fit))
 
-# 光合成-光曲線.
+# 光合成-光曲線の図.
 df3 |> 
   unnest(pefit) |> 
   ggplot() +
   geom_point(aes(x = ppfd_mean, y = rate, color = species), size = 3) +
-  geom_line(aes(x = ppfd_mean, y = fit, group = species, color = species), size = 1)
+  geom_line(aes(x = ppfd_mean, y = fit, group = species, color = species), size = 1) +
+  facet_wrap(vars(species))
 
+
+# 係数の抽出. ------------------------------------------------------------------
 # 光飽和点.
 ik_fn = function(model){
   cfs = coef(model)
@@ -312,6 +317,3 @@ coef = df3 |>
   select(species, pmax, alpha, rd)
 
 cdata = coef |> left_join(ik_ic, by = "species")
-
-
-
