@@ -6,6 +6,7 @@ library(tidyverse)
 library(lubridate)
 library(readxl)
 library(stringi)
+library(minpack.lm)
 
 # ファイルパスを取り出す. ------------------------------------------------------
 files = tibble(fpath = dir("~/Lab_Data/学生実験/2022データ/", full = T))
@@ -156,8 +157,161 @@ func_all = function(file){
     left_join(s3, by = c("han", "sample"))
 }
 
+# データの読み込み. ------------------------------------------------------------
+alldata = files |> mutate(data = map(fpath, func_all)) |> unnest()
 
-mgldata = files |> mutate(data = map(fpath, sheet1_func)) |> unnest() |> select(-fpath)
-mgldata = mgldata |> select(-c(remarks))
-lightdata = files |> mutate(data = map(fpath, sheet2_func)) |> unnest() |> select(-fpath)
-seaweeddata = files |> mutate(data = map(fpath, sheet3_func)) |> unnest() |> select(-fpath)
+alldata |> select(-remarks) |> print(n= Inf)
+
+# 作図.
+alldata |> 
+  ggplot() +
+  geom_point(aes(x = time, y = mgl, color = species, group = species)) +
+  facet_grid(han ~ light, scales = "free")
+
+alldata = alldata |> select(-c(fpath, remarks))
+
+# ちょっと遊びます.
+# [DO] と [時間＊班＊サンプル＊光条件]の関係性を線形で表現.
+m1 = lm(mgl ~ time * han * sample * light, data = alldata)
+
+summary(m1)
+
+valuehat = predict(m1)
+valuese = predict(m1, se.fit = T)$se.fit
+dset = alldata |> 
+  mutate(valuehat,
+         valuese) |> 
+  mutate(l95 = valuehat - 1.96 * valuese,
+         u95 = valuehat + 1.96 * valuese) |> 
+  mutate(across(c(valuehat, l95, u95)))
+
+# 作図.
+dset |> 
+  ggplot(aes(x = time, group = sample)) +
+  geom_point(aes(y = mgl, color = species), size = 3) +
+  geom_line(aes(y = valuehat, color = species),size = 1) +
+  facet_wrap(han ~ light, ncol = 5)
+
+# 授業用. ----------------------------------------------------------------------
+mgldata = files |>
+  mutate(data = map(fpath, sheet1_func)) |> 
+  unnest() |> 
+  select(-c(fpath, remarks))
+
+lightdata = files |> 
+  mutate(data = map(fpath, sheet2_func)) |> 
+  unnest() |> 
+  select(-fpath)
+
+seaweeddata = files |> 
+  mutate(data = map(fpath, sheet3_func)) |> 
+  unnest() |>
+  select(-fpath)
+
+df0 = mgldata |> 
+  left_join(seaweeddata, by = c("han", "sample")) |> 
+  left_join(lightdata, by = c("han", "light", "sample"))
+
+# 関数を定義. ------------------------------------------------------------------
+# 関数の定義 
+
+# [DO] と [時間]の関係性を線形で表現.
+fit_lm = function(df){
+  lm(mgl ~ time, data = df)
+} 
+
+# 期待値の算出.
+get_fit = function(data, mout){
+  data |> mutate(fit = predict(mout))
+}
+
+# 傾きの抽出.
+get_slope = function (model){
+  coef(model)[2]
+}
+
+# 光合成-光曲線の式.
+pecurve = function(pmax, alpha, rd, ppfd){
+  pmax*(1 - exp(-alpha / pmax*ppfd)) - rd
+}
+
+# 光合成光曲線の当てはめ.
+fit_nls = function(data){
+  nlsLM(rate ~ pecurve(pmax = pmax, alpha = alpha, rd = rd, ppfd = ppfd_mean),
+        data = data, start = START)
+}
+
+# modeling. --------------------------------------------------------------------
+df1 = df0 |> group_nest(han, species, light)
+df1 = df1 |> mutate(mout = map(data, fit_lm))
+
+# 統計量.
+df_tosave = df1 |> 
+  mutate(stats = map(mout, broom::glance)) |> 
+  unnest(stats) |>
+  select(han, species, light, adj.r.squared, statistic, df, df.residual, p.value)
+
+# 推定結果.
+df_tosave2 = df1 |> 
+  mutate(cfs = map(mout, broom::tidy)) |> 
+  unnest(cfs) |> 
+  select(han, species, light, term, estimate, std.error, statistic, p.value)
+
+df2 = df1 |> mutate(fit = map2(data, mout, get_fit))
+
+df2 |> 
+  select(han, species, light, fit) |> 
+  unnest(fit) |> 
+  ggplot() +
+  geom_point(aes(time, mgl, color = species)) +
+  geom_line(aes(time, fit, group = species), color = "black", size = 1) +
+  facet_wrap(vars(han, light))
+
+df3 = df2 |> 
+  mutate(slope = map_dbl(mout, get_slope)) |>
+  unnest(data) |> 
+  mutate(rate = slope*vol/gww)
+
+START = list(pmax = 5, alpha = 0.1, rd = 0.1)
+
+df3 = df3 |> 
+  select(-c(fit, mout)) |> 
+  group_nest(species) |> 
+  mutate(peout = map(data, fit_nls)) |> 
+  mutate(pefit = map2(data, peout, get_fit))
+
+# 光合成-光曲線.
+df3 |> 
+  unnest(pefit) |> 
+  ggplot() +
+  geom_point(aes(x = ppfd_mean, y = rate, color = species), size = 3) +
+  geom_line(aes(x = ppfd_mean, y = fit, group = species, color = species), size = 1)
+
+# 光飽和点.
+ik_fn = function(model){
+  cfs = coef(model)
+  cfs["pmax"]/cfs["alpha"]
+}
+
+# 光補償点.
+ic_fn = function(model){
+  cfs = coef(model)
+  cfs["pmax"]/cfs["alpha"]*log(cfs["pmax"]/(cfs["pmax"] - cfs["rd"]))
+}
+
+ik_ic = df3 |>
+  mutate(ik = map_dbl(peout, ik_fn),
+         ic = map_dbl(peout, ic_fn)) |> 
+  select(species, ik, ic)
+
+coef = df3 |> 
+  mutate(coef = map(peout, coef)) |> 
+  unnest(coef) |> 
+  mutate(label = c("pmax", "alpha", "rd", "pmax", "alpha", "rd")) |> 
+  pivot_wider(names_from = label, values_from = coef) |> 
+  select(species, pmax, alpha, rd)
+
+cdata = coef |> left_join(ik_ic, by = "species")
+
+
+
