@@ -20,6 +20,12 @@ library(flextable)
 library(equatags)
 ```
 
+コメント： equatags は flextable 内に数式を記述するために必要。
+インストールしたと、`equatags::mathjax_install()` を１回だけ実行する必要があります。
+`equatags` を更新するたびに `equatags::mathjax_install()`　を実行してください。
+サーバーにはインストール済みですが、`equatags::mathjax_install()`はユーザー毎にする必要がある。
+
+
 ## データの読み込み
 
 ```{r}
