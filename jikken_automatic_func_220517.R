@@ -7,6 +7,7 @@ library(lubridate)
 library(readxl)
 library(stringi)
 library(minpack.lm)
+library(ggrepel)
 
 # ファイルパスを取り出す. ------------------------------------------------------
 files = tibble(fpath = dir("~/Lab_Data/学生実験/2022データ/", full = T))
@@ -158,40 +159,40 @@ func_all = function(file){
 }
 
 # データの読み込み. ------------------------------------------------------------
-alldata = files |> mutate(data = map(fpath, func_all)) |> unnest()
-
-alldata |> select(-remarks) |> print(n= Inf)
-
-# 作図.
-alldata |> 
-  ggplot() +
-  geom_point(aes(x = time, y = mgl, color = species, group = species)) +
-  facet_grid(han ~ light, scales = "free")
-
-alldata = alldata |> select(-c(fpath, remarks))
-
-# ちょっと遊びます.
-# [DO] と [時間＊班＊サンプル＊光条件]の関係性を線形で表現.
-m1 = lm(mgl ~ time * han * sample * light, data = alldata)
-
-summary(m1)
-
-valuehat = predict(m1)
-valuese = predict(m1, se.fit = T)$se.fit
-dset = alldata |> 
-  mutate(valuehat,
-         valuese) |> 
-  mutate(l95 = valuehat - 1.96 * valuese,
-         u95 = valuehat + 1.96 * valuese) |> 
-  mutate(across(c(valuehat, l95, u95)))
-
-# 作図.
-dset |> 
-  ggplot(aes(x = time, group = sample)) +
-  geom_point(aes(y = mgl, color = species), size = 3) +
-  geom_line(aes(y = valuehat, color = species),size = 1) +
-  facet_wrap(han ~ light, ncol = 5)
-
+# alldata = files |> mutate(data = map(fpath, func_all)) |> unnest()
+# 
+# alldata |> select(-remarks) |> print(n= Inf)
+# 
+# # 作図.
+# alldata |> 
+#   ggplot() +
+#   geom_point(aes(x = time, y = mgl, color = species, group = species)) +
+#   facet_grid(han ~ light, scales = "free")
+# 
+# alldata = alldata |> select(-c(fpath, remarks))
+# 
+# # ちょっと遊びます.
+# # [DO] と [時間＊班＊サンプル＊光条件]の関係性を線形で表現.
+# m1 = lm(mgl ~ time * han * sample * light, data = alldata)
+# 
+# summary(m1)
+# 
+# valuehat = predict(m1)
+# valuese = predict(m1, se.fit = T)$se.fit
+# dset = alldata |> 
+#   mutate(valuehat,
+#          valuese) |> 
+#   mutate(l95 = valuehat - 1.96 * valuese,
+#          u95 = valuehat + 1.96 * valuese) |> 
+#   mutate(across(c(valuehat, l95, u95)))
+# 
+# # 作図.
+# dset |> 
+#   ggplot(aes(x = time, group = sample)) +
+#   geom_point(aes(y = mgl, color = species), size = 3) +
+#   geom_line(aes(y = valuehat, color = species),size = 1) +
+#   facet_wrap(han ~ light, ncol = 5)
+# 
 # 授業用データ. ----------------------------------------------------------------
 mgldata = files |>
   mutate(data = map(fpath, sheet1_func)) |> 
@@ -283,13 +284,15 @@ df3 = df3 |>
   mutate(pefit = map2(data, peout, get_fit))
 
 # 光合成-光曲線の図.
-df3 |> 
+g1 = df3 |> 
   unnest(pefit) |> 
   ggplot() +
   geom_point(aes(x = ppfd_mean, y = rate, color = species), size = 3) +
   geom_line(aes(x = ppfd_mean, y = fit, group = species, color = species), size = 1) +
+  scale_color_viridis_d(end = 0.7) +
   facet_wrap(vars(species))
 
+g1
 
 # 係数の抽出. ------------------------------------------------------------------
 # 光飽和点.
@@ -309,6 +312,10 @@ ik_ic = df3 |>
          ic = map_dbl(peout, ic_fn)) |> 
   select(species, ik, ic)
 
+ik_ic = ik_ic |> 
+  mutate(label_ic = paste("光補償点", sprintf("%.2f",ic)),
+         label_ik = paste("光飽和点", sprintf("%.2f",ik)))
+
 coef = df3 |> 
   mutate(coef = map(peout, coef)) |> 
   unnest(coef) |> 
@@ -316,4 +323,18 @@ coef = df3 |>
   pivot_wider(names_from = label, values_from = coef) |> 
   select(species, pmax, alpha, rd)
 
-cdata = coef |> left_join(ik_ic, by = "species")
+# cdata = coef |> left_join(ik_ic, by = "species")
+
+g1 + 
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_point(aes(x = ic, y = 0), data = ik_ic, size = 3) +
+  geom_point(aes(x = ik, y = 0), data = ik_ic, size = 3) +
+  geom_text_repel(aes(x = ic, y = 0, label = label_ic),
+                   data = ik_ic, box.padding = 2, nudge_y = -2, nudge_x = 100) +
+  geom_text_repel(aes(x = ik, y = 0, label = label_ik),
+                   data = ik_ic, box.padding = 2, nudge_y = -2, nudge_x = 150) +
+  ggpubr::theme_pubr()
+
+
+
+
