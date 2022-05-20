@@ -290,7 +290,7 @@ g1 = df3 |>
   geom_point(aes(x = ppfd_mean, y = rate, color = species), size = 3) +
   geom_line(aes(x = ppfd_mean, y = fit, group = species, color = species), size = 1) +
   scale_color_viridis_d(end = 0.7) +
-  facet_wrap(vars(species))
+  facet_wrap("species")
 
 g1
 
@@ -313,8 +313,8 @@ ik_ic = df3 |>
   select(species, ik, ic)
 
 ik_ic = ik_ic |> 
-  mutate(label_ic = paste("光補償点", sprintf("%.2f",ic)),
-         label_ik = paste("光飽和点", sprintf("%.2f",ik)))
+  mutate(label_ic = paste("光補償点", sprintf("%.0f",ic)),
+         label_ik = paste("光飽和点", sprintf("%.0f",ik)))
 
 coef = df3 |> 
   mutate(coef = map(peout, coef)) |> 
@@ -325,15 +325,35 @@ coef = df3 |>
 
 # cdata = coef |> left_join(ik_ic, by = "species")
 
-g1 + 
+g2 = g1 + 
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
-  geom_point(aes(x = ic, y = 0), data = ik_ic, size = 3) +
-  geom_point(aes(x = ik, y = 0), data = ik_ic, size = 3) +
+  # geom_point(aes(x = ic, y = 0), data = ik_ic, size = 3) +
+  # geom_point(aes(x = ik, y = 0), data = ik_ic, size = 3) +
   geom_text_repel(aes(x = ic, y = 0, label = label_ic),
-                   data = ik_ic, box.padding = 2, nudge_y = -2, nudge_x = 100) +
-  geom_text_repel(aes(x = ik, y = 0, label = label_ik),
-                   data = ik_ic, box.padding = 2, nudge_y = -2, nudge_x = 150) +
+                  data = ik_ic, box.padding = 1, nudge_x = 100, nudge_y = -1) +
+  geom_text_repel(aes(x = ic, y = 0, label = label_ik),
+            data = ik_ic, box.padding = 1,
+            nudge_x = 450, nudge_y = -1, min.segment.length = 10000) +
   ggpubr::theme_pubr()
+
+g2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
