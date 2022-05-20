@@ -1,0 +1,234 @@
+---
+title: "光合成曲線の解析"
+format: docx
+---
+
+## 光合成曲線のモデル
+
+$$
+P_{net} = P_{max}\left(1-\exp\left(\frac{\alpha}{P_{max}}I\right)\right) -R_d
+$$
+
+## 必要パッケージ
+
+```{r}
+library(tidyverse)
+library(nlstools)
+library(minpack.lm)
+library(readxl)
+library(flextable)
+library(equatags)
+```
+
+## データの読み込み
+
+```{r}
+fname = "~/Lab_Data/学生実験_tateishi/学生実験データ/greg先生実験データ_5.12_6班_済.xlsx"
+sheet = excel_sheets(fname)
+range = c("A1:F85", "A1:D25", "A1:F2")
+oxygen = read_xlsx(fname, 
+                   sheet = sheet[1], 
+                   range = range[1])
+light    = read_xlsx(fname, 
+                   sheet = sheet[2], 
+                   range = range[2])
+gww  = read_xlsx(fname, 
+                   sheet = sheet[3], 
+                   range = range[3])
+```
+
+## 変数名を修正する
+
+```{r}
+oxygen = oxygen |> 
+  rename(han = "班",
+         sample = matches("サンプル"),
+         net = matches("光"),
+         temperature = matches("水温"),
+         min = matches("min"),
+         mgl = matches("酸素"))
+oxygen = oxygen |> drop_na()
+light = light |> 
+  rename(han = "班",
+         net = "光環境",
+         sample = "測定番号",
+         light = "光量子量")
+light = light |> fill(han, net)
+gww = gww |> 
+  rename(han = "班",
+         sample = matches("サンプル"),
+         gww = matches("湿"),
+         vol = matches("酸素"))
+```
+
+## 光環境における光量子量の記述統計量
+
+```{r}
+light = light |> 
+  group_by(net) |> 
+  summarise(light = mean(light))
+```
+
+## 光環境データと海藻データを結合する。
+
+```{r}
+light = light |> 
+  add_row(light = 0, net = "アルミホイル") |> 
+  add_column(gww=gww$gww) |> 
+  add_column(vol=gww$vol) |> 
+  add_column(species = gww$海藻)
+
+
+```
+
+## 回帰曲線を当てはめる
+
+```{r}
+pecurve = function(pmax, alpha, rd, i) {
+  pmax * (1 - exp(-alpha / pmax * i)) - rd
+}
+
+oxygen = oxygen |>
+  group_nest(net) |> 
+  mutate(mout = map(data, ~ lm(mgl ~ min, data = .x))) |> 
+  mutate(slope = map_dbl(mout, ~ coefficients(.x)[2]))
+
+
+```
+
+## `light` と `oxygen` を結合
+
+```{r}
+alldata = full_join(light, oxygen, by = "net")
+```
+
+## 光合成速度を求める
+
+```{r}
+alldata = alldata |> mutate(rate = slope / gww * vol)
+```
+
+## 光合成光曲線を当てはめる
+
+```{r}
+startvalues = list(pmax = 20, alpha = 0.1, rd = 1)
+preview(rate ~ pecurve(pmax, alpha, rd, light), 
+         data = alldata, variable = 2,
+        start = startvalues)
+```
+
+```{r}
+mfit = nlsLM(rate ~ pecurve(pmax, alpha, rd, light), data = alldata, start = startvalues)
+```
+
+```{r}
+summary(mfit)
+```
+
+
+
+## Figures
+
+```{r}
+xlabel = "Time (min)"
+ylabel = "'Dissolved oxygen'~(mg~l^{-1})"
+cleanlabel = function(x) {sprintf("%0.1f", as.numeric(x))}
+alldata |>
+  select(light, data) |> 
+  unnest(data) |> 
+  ggplot() + 
+  geom_point(aes(x = min, y = mgl)) + 
+  geom_smooth(aes(x = min, y = mgl),
+              method = "lm",
+              formula = y~x) + 
+  scale_x_continuous(parse(text = xlabel)) +
+  scale_y_continuous(parse(text = ylabel)) +
+  facet_wrap(vars(light), 
+             labeller = as_labeller(cleanlabel),
+             ncol = 1)
+```
+
+```{r}
+newdata = alldata |> expand(light = seq(0, max(light), length = 21)) 
+newdata = newdata |> mutate(fit = predict(mfit, newdata = newdata))
+xlabel = "PPFD~(mu*mol~photons~m^{-2}~s^{-1})"
+ylabel = "NP~(mu*g~g[{ww}]~min^{-1})"
+```
+
+```{r}
+ggplot() + 
+  geom_point(aes(x = light, y = rate), data = alldata) +
+  geom_line(aes(x = light, y = fit), data = newdata) + 
+  scale_x_continuous(parse(text = xlabel)) +
+  scale_y_continuous(parse(text = ylabel))
+  
+```
+
+## Tables
+
+```{r}
+check_p = function(x) {
+  ifelse(x < 0.0001, "< 0.0001",  sprintf("%0.4f", x))
+}
+
+alldata |> select(light, mout) |> 
+  mutate(out = map(mout, broom::glance)) |> 
+  unnest(out) |> 
+  select(light, adj.r.squared, statistic, df, df.residual, p.value) |> 
+  unite(df, df, df.residual, sep = ", ") |> 
+  arrange(light) |> 
+  mutate(p.value = check_p(p.value)) |> 
+  flextable() |> 
+  colformat_double(j = "light", digits = 0) |> 
+  colformat_double(j = "adj.r.squared", digits = 4) |> 
+  colformat_double(j = "statistic", digits = 1) |> 
+  set_header_labels(light = "光量子量",
+                    adj.r.squared = "Radj^2",
+                    statistic = "F value",
+                    df = "D.F.",
+                    p.value = "P value") |> 
+  mk_par(j = "adj.r.squared", 
+         value = as_paragraph(as_equation("\\mathrm{R_{adj}^2}", width = 3, height = 1)), part = "header") |>
+  set_table_properties(layout = "autofit") |> 
+  footnote(j=1, value = as_paragraph(as_equation("\\mathrm{\\mu mol~photons~m^{-2}~s^{-1}}")), ref_symbols = "1", part = "header") |> 
+  set_caption("オゴノリの光合成速度のモデル統計量")
+```
+
+
+```{r}
+eq = c(
+  "\\mathrm{\\mu g~O_{2}~g_{ww}^{-1}~min^{-1}}",
+  "\\mathrm{\\mu g~O_{2}~g_{ww}^{-1}~min^{-1} (\\mu~mol~photons~m^{-2}~s^{-1})^{-1}}",
+  "\\mathrm{\\mu g~O_{2}~g_{ww}^{-1}~min^{-1}}",
+  "\\mathrm{\\mu mol~photons~m^{-2}~s^{-1}}",
+  "\\mathrm{\\mu mol~photons~m^{-2}~s^{-1}}")
+
+mfit |> coef() |> 
+  as_tibble_row() |> 
+  mutate(ic = pmax / alpha,
+         ik = pmax / alpha * log(pmax / (pmax -rd))) |> 
+  pivot_longer(everything()) |> 
+  mutate(name = fct_recode(name,
+                           "\\mathrm{P_{max}}" = "pmax",
+                           "\\alpha" = "alpha",
+                           "\\mathrm{R_{d}}" = "rd",
+                           "\\mathrm{I_{c}}" = "ic",
+                           "\\mathrm{I_{k}}" = "ik")) |> 
+  mutate(eq = eq) |> 
+  flextable() |> 
+  mk_par(j = "eq", value = as_paragraph(as_equation(eq, width = 3, height = 1))) |> 
+  mk_par(j = "name", value = as_paragraph(as_equation(name, width = 3, height = 1))) |> 
+  colformat_double(i = 1, digits = 1) |> 
+  colformat_double(i = 2, digits = 3) |> 
+  colformat_double(i = 3, digits = 1) |> 
+  colformat_double(i = 4, digits = 1) |> 
+  colformat_double(i = 5, digits = 1) |> 
+  set_header_labels(name = "モデルパラメータ",
+                    value = "値",
+                    eq = "単位") |> 
+  set_table_properties(layout = "autofit") |> 
+  set_caption("オゴノリの光合成光曲線のモデルパラメータ")
+```
+
+
+
